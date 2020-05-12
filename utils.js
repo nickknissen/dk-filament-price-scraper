@@ -1,3 +1,4 @@
+const fs = require("fs");
 
 function useCache(filename) {
   let fd;
@@ -13,7 +14,6 @@ function useCache(filename) {
   }
 
   var twentyfourHoursAgo = new Date().getTime() - (1 * 24 * 60 * 60 * 1000)
-
   return stats.mtime.getTime() > twentyfourHoursAgo;
 }
 
@@ -26,13 +26,17 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function getToday() {
+  return new Date().toISOString().slice(0, 10)
+}
+
 function detectType(text)  {
-  const regex = /(PETG|PLA|ABS|ASA|RESIN|FLEX|nylon|PC|PP\+|PBT\+|PVA)/gim
+  const regex = /(PETG|PLA|ABS|ASA|RESIN|FLEX|nylon|PC|PP\+|PBT\+|PVA|POM|resin)/gim
   const types = ["PETG", "PLA", "ABS", "ASA", "RESIN", "FLEX", "nylon", "PC", "PP+", "PBT+", "PVA"];
 
-  const matches = str.match(regex);
+  const matches = text.match(regex);
   if (!matches) {
-    return 'unknow';
+    return 'unknown';
   }
 
   const groupd = matches.reduce((total, value) => {
@@ -47,5 +51,5 @@ function detectType(text)  {
 }
 
 module.exports = {
-    random, sleep, useCache
+    random, sleep, useCache, detectType, getToday 
 }

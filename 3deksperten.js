@@ -3,17 +3,19 @@ const fs = require('fs');
 const utils = require('./utils');
 
 
-async function getFillaments(page, url) {
+async function extraListInfo(page, url) {
   await page.goto(url);
 
   const data = await page.evaluate(
     () => [...document.querySelectorAll(".item.product.product-item")].map(element => {
       const price = element.querySelector(".price-container span").dataset.priceAmount;
       const title = element.querySelector(".product-item-link").textContent.trim();
+      const id = element.querySelector(".price-box").dataset.productId
       return {
-        title: title,
+        title,
+        id,
+        price,
         outofstock: !!element.querySelector(".stock.unavailable"),
-        price: price,
         currency: "DKK",
         url: element.querySelector("a").href,
         categories: [],
@@ -28,24 +30,36 @@ async function getFillaments(page, url) {
   return { data, nextPageUrl };
 }
 
-async function scrapeList(page) {
-  const filename = "3deksperten-filament.json"
+function transformListData(list) {
+  return list.map(item => {
 
-  if (utils.useCache(filename)) {
+    const type = utils.detectType(item.title)
+    return {
+      ...item,
+      type,
+    };
+  })
+
+}
+
+async function scrapeList(page) {
+  const filename = `3deksperten-filament-${utils.getToday()}.json`
+
+  let url = 'https://3deksperten.dk/filament.html?product_list_limit=200';
+
+  if (fs.existsSync(filename)) {
     console.log('Using cache from last 24 hours')
     return JSON.parse(fs.readFileSync(filename, 'utf8'));
-  } else if(fs.existsSync(filename)) {
-    fs.unlinkSync(filename);
   }
 
   let hasNextPage = true;
-  let results = [] ;
-  let url = 'https://3deksperten.dk/filament.html?product_list_limit=200';
+  let results = [];
 
   while (hasNextPage) {
     console.log('fetching ' + url);
-    let {data, nextPageUrl } = await getFillaments(page, url);
-    results = [...results, ...data];
+    let { data, nextPageUrl } = await extraListInfo(page, url);
+
+    results = [...results, ...transformListData(data)];
     if (!nextPageUrl) {
       hasNextPage = false;
     }
@@ -58,19 +72,77 @@ async function scrapeList(page) {
   return results;
 }
 
+async function extractDetailInfo(page) {
+
+  const detailsExists = await page.evaluate(() => !!document.querySelector("#tab-label-description-title"));
+
+  if (!detailsExists) {
+    return {};
+  }
+
+  const description = await page.evaluate(
+    () => document.querySelector(".product.attribute.description .value").textContent
+  );
+
+  const type = utils.detectType(description);
+
+  const props = await page.evaluate(
+    () => {
+      const overviewProps = document.querySelector(".product.attribute.overview .value")
+        .textContent
+        .split("\n")
+        .filter(x => x.includes(":"))
+        .map(x => x.split(":"))
+        .reduce((carry, item) => {
+          carry[item[0].trim()] = item[1].trim();
+          return carry
+        }, {})
+
+      const tableProps = [...document.querySelectorAll(".product.attribute.overview table tr")]
+        .reduce((carry, item) => {
+          if (item.children.length != 2) {
+            return carry
+          }
+          carry[item.children[0].textContent.trim()] = item.children[1].textContent.trim()
+          return carry;
+        }, {})
+
+      const descriptionProps = document.querySelector(".product.attribute.description .value")
+        .textContent
+        .split("\n")
+        .filter(x => x.includes(":"))
+        .map(x => x.split(":"))
+        .reduce((carry, item) => {
+          carry[item[0].trim()] = item[1].trim();
+          return carry
+        }, {})
+
+      return [overviewProps, tableProps, descriptionProps]
+        .sort((a, b) => Object.keys(b).length - Object.keys(a).length)
+        .shift()
+
+    }
+  );
+
+
+  return {
+    props,
+    type,
+  }
+}
+
 (async () => {
   // 3deksperten.dk, 3Dstore.dk, Filament23D.dk, in2motion.dk, Techbitshop.dk, 3djake.com, www.reprap.me
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
 
   const listInfo = await scrapeList(page);
+
+  const detailsFilename = `3deksperten-details-${utils.getToday()}.json`;
   let existing = []
   try {
-    existing = JSON.parse(fs.readFileSync("3deksperten-details.json"));
-  } catch {
-
-  }
-  return;
+    existing = JSON.parse(fs.readFileSync(detailsFilename));
+  } catch { }
 
   const existingUrls = existing.map(x => x.url)
   const fitleredList = listInfo.filter(x => !existingUrls.includes(x.url));
@@ -78,27 +150,22 @@ async function scrapeList(page) {
 
   let details = [...existing];
 
-  for (let i= 0; i < fitleredList.length-1; i++) {
+  for (let i = 0; i < fitleredList.length - 1; i++) {
     const filament = fitleredList[i];
     console.log('fetching info from', filament.url);
-    await utils.sleep(2000);
+    //await utils.sleep(2000);
     await page.goto(filament.url);
-    let props = {}; 
 
-    const attributes = await page.evaluate(
-      () => [...document.querySelectorAll(".woocommerce-product-attributes-item")]
-        .map(x => {
-          return x.textContent
-            .split("\n")
-            .map(s => s.trim() ? s.trim() : null)
-            .filter(t => t)
-        })
-    );
-    attributes.forEach(element => {
-      props[element[0]] = element[1]
-    });
-    details.push({...filament, props});
-    fs.writeFileSync("3dstore-details.json", JSON.stringify(details, null, 2))
+    const props = await extractDetailInfo(page);
+
+    if (filament.type == "unknown") {
+      delete props.type;
+    }
+
+    details.push({ ...filament, ...props });
+    fs.writeFileSync(detailsFilename, JSON.stringify(details, null, 2))
   }
+
+  console.log("All done :D");
 
 })();
