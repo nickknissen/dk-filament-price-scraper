@@ -30,15 +30,8 @@ function getToday() {
   return new Date().toISOString().slice(0, 10)
 }
 
-function detectType(text)  {
-  const regex = /(PETG|PLA|ABS|ASA|RESIN|FLEX|nylon|PC|PP\+|PBT\+|PVA|POM|resin)/gim
-  const types = ["PETG", "PLA", "ABS", "ASA", "RESIN", "FLEX", "nylon", "PC", "PP+", "PBT+", "PVA"];
 
-  const matches = text.match(regex);
-  if (!matches) {
-    return 'unknown';
-  }
-
+function getMostCommonMatch(matches)  {
   const groupd = matches.reduce((total, value) => {
       total[value] = (total[value] || 0) + 1;
       return total;
@@ -50,6 +43,39 @@ function detectType(text)  {
     .shift(); // get type "PLA"
 }
 
+function detectWeight(text) {
+  const regex = /\s([\d.|,]+)\s*(g|kg|ml|gr|l)/gim
+
+  const matches = text.match(regex);
+  if (!matches) {
+    return 'unknown';
+  }
+}
+
+
+function detectWidth(text) {
+  const regex = /(1|2)(.|,)(7|8)5/gm
+
+  const matches = text.match(regex);
+  if (!matches) {
+    return 'unknown';
+  }
+
+  return getMostCommonMatch(matches).replace(",", ".")
+
+}
+
+function detectType(text)  {
+  const regex = /(PETG|PLA|ABS|ASA|RESIN|FLEX|nylon|PC|PP\+|PBT\+|PVA|POM|resin)/gim
+
+  const matches = text.match(regex);
+  if (!matches) {
+    return 'unknown';
+  }
+
+  return getMostCommonMatch(matches)
+}
+
 module.exports = {
-    random, sleep, useCache, detectType, getToday 
+    random, sleep, useCache, detectType, getToday, detectWidth, detectWeight
 }

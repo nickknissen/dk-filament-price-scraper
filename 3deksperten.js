@@ -30,18 +30,6 @@ async function extraListInfo(page, url) {
   return { data, nextPageUrl };
 }
 
-function transformListData(list) {
-  return list.map(item => {
-
-    const type = utils.detectType(item.title)
-    return {
-      ...item,
-      type,
-    };
-  })
-
-}
-
 async function scrapeList(page) {
   const filename = `3deksperten-filament-${utils.getToday()}.json`
 
@@ -59,7 +47,8 @@ async function scrapeList(page) {
     console.log('fetching ' + url);
     let { data, nextPageUrl } = await extraListInfo(page, url);
 
-    results = [...results, ...transformListData(data)];
+    results = [...results, ...data];
+
     if (!nextPageUrl) {
       hasNextPage = false;
     }
@@ -72,22 +61,56 @@ async function scrapeList(page) {
   return results;
 }
 
+
+
 async function extractDetailInfo(page) {
 
-  const detailsExists = await page.evaluate(() => !!document.querySelector("#tab-label-description-title"));
 
-  if (!detailsExists) {
-    return {};
-  }
+  const type = await page.evaluate(async () => {
+    let filamentType  = "unknown";
 
-  const description = await page.evaluate(
-    () => document.querySelector(".product.attribute.description .value").textContent
-  );
+    const title = document.querySelector(".page-title").textContent;
+    filamentType = await window.detectType(title);
 
-  const type = utils.detectType(description);
+    if (filamentType != "unknown") {
+      return filamentType;
+    }
+
+    if (!!document.querySelector("#tab-label-description-title")) {
+      filamentType = await window.detectType(document.querySelector(".product.attribute.description .value").textContent);
+    }
+
+    if (filamentType != "unknown") {
+      return filamentType;
+    }
+
+    return await window.detectType(document.querySelector(".product.attribute.overview .value").textContent);
+  });
+
+  const width = await page.evaluate(async () => {
+    let width = "unknown";
+
+    const title = document.querySelector(".page-title").textContent;
+    filamentType = await window.detectWidth(title);
+
+    if (width!= "unknown") {
+      return width;
+    }
+
+    if (!!document.querySelector("#tab-label-description-title")) {
+      width = await window.detectWidth(document.querySelector(".product.attribute.description .value").textContent);
+    }
+
+    if (width != "unknown") {
+      return width;
+    }
+
+    return await window.detectWidth(document.querySelector(".product.attribute.overview .value").textContent);
+  });
 
   const props = await page.evaluate(
     () => {
+      let descriptionProps = [];
       const overviewProps = document.querySelector(".product.attribute.overview .value")
         .textContent
         .split("\n")
@@ -106,16 +129,18 @@ async function extractDetailInfo(page) {
           carry[item.children[0].textContent.trim()] = item.children[1].textContent.trim()
           return carry;
         }, {})
-
-      const descriptionProps = document.querySelector(".product.attribute.description .value")
-        .textContent
-        .split("\n")
-        .filter(x => x.includes(":"))
-        .map(x => x.split(":"))
-        .reduce((carry, item) => {
-          carry[item[0].trim()] = item[1].trim();
-          return carry
-        }, {})
+      
+      if (!!document.querySelector("#tab-label-description-title")) {
+        descriptionProps = document.querySelector(".product.attribute.description .value")
+          .textContent
+          .split("\n")
+          .filter(x => x.includes(":"))
+          .map(x => x.split(":"))
+          .reduce((carry, item) => {
+            carry[item[0].trim()] = item[1].trim();
+            return carry
+          }, {})
+      }
 
       return [overviewProps, tableProps, descriptionProps]
         .sort((a, b) => Object.keys(b).length - Object.keys(a).length)
@@ -124,10 +149,16 @@ async function extractDetailInfo(page) {
     }
   );
 
+  const weight = await page.evaluate(() => {
+    const regex = /([\d.|,]+)\s*(g|kg)/gim
+
+  });
+
 
   return {
     props,
     type,
+    width,
   }
 }
 
@@ -135,6 +166,10 @@ async function extractDetailInfo(page) {
   // 3deksperten.dk, 3Dstore.dk, Filament23D.dk, in2motion.dk, Techbitshop.dk, 3djake.com, www.reprap.me
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
+
+  page.on('console', msg => console.log(msg.text()));
+  await page.exposeFunction("detectType", text => utils.detectType(text));
+  await page.exposeFunction("detectWidth", text => utils.detectWidth(text));
 
   const listInfo = await scrapeList(page);
 
@@ -157,10 +192,6 @@ async function extractDetailInfo(page) {
     await page.goto(filament.url);
 
     const props = await extractDetailInfo(page);
-
-    if (filament.type == "unknown") {
-      delete props.type;
-    }
 
     details.push({ ...filament, ...props });
     fs.writeFileSync(detailsFilename, JSON.stringify(details, null, 2))
