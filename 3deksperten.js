@@ -8,6 +8,9 @@ async function extraListInfo(page, url) {
 
   const data = await page.evaluate(
     () => [...document.querySelectorAll(".item.product.product-item")].map(element => {
+      if (!element.querySelector(".price-container span")) {
+        return;
+      }
       const price = element.querySelector(".price-container span").dataset.priceAmount;
       const title = element.querySelector(".product-item-link").textContent.trim();
       const id = element.querySelector(".price-box").dataset.productId
@@ -31,7 +34,7 @@ async function extraListInfo(page, url) {
 }
 
 async function scrapeList(page) {
-  const filename = `3deksperten-filament-${utils.getToday()}.json`
+  const filename = `output/3deksperten-filament-${utils.getToday()}.json`
 
   let url = 'https://3deksperten.dk/filament.html?product_list_limit=200';
 
@@ -91,14 +94,16 @@ async function extractDetailInfo(page) {
     let width = "unknown";
 
     const title = document.querySelector(".page-title").textContent;
-    filamentType = await window.detectWidth(title);
+    width = await window.detectWidth(title);
 
-    if (width!= "unknown") {
+    if (width != "unknown") {
       return width;
     }
 
     if (!!document.querySelector("#tab-label-description-title")) {
-      width = await window.detectWidth(document.querySelector(".product.attribute.description .value").textContent);
+      width = await window.detectWidth(
+        document.querySelector(".product.attribute.description .value").textContent
+      );
     }
 
     if (width != "unknown") {
@@ -167,20 +172,20 @@ async function extractDetailInfo(page) {
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
 
-  page.on('console', msg => console.log(msg.text()));
+  //page.on('console', msg => console.log(msg.text()));
   await page.exposeFunction("detectType", text => utils.detectType(text));
   await page.exposeFunction("detectWidth", text => utils.detectWidth(text));
 
   const listInfo = await scrapeList(page);
 
-  const detailsFilename = `3deksperten-details-${utils.getToday()}.json`;
+  const detailsFilename = `output/3deksperten-details-${utils.getToday()}.json`;
   let existing = []
   try {
     existing = JSON.parse(fs.readFileSync(detailsFilename));
   } catch { }
 
   const existingUrls = existing.map(x => x.url)
-  const fitleredList = listInfo.filter(x => !existingUrls.includes(x.url));
+  const fitleredList = listInfo.filter(x => x && !existingUrls.includes(x.url));
   console.log(`intial list ${listInfo.length}. list to fetch: ${fitleredList.length}`);
 
   let details = [...existing];

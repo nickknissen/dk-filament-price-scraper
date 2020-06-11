@@ -62,7 +62,7 @@ async function extractDetailInfo(page) {
 }
 
 async function scrapeList(page) {
-  const filename = `3dstore-filament-${utils.getToday()}.json`;
+  const filename = `output/3dstore-filament-${utils.getToday()}.json`;
   let url = 'https://3dstore.dk/filament/';
 
   if (fs.existsSync(filename)) {
@@ -93,7 +93,7 @@ async function scrapeList(page) {
   // 3deksperten.dk, 3Dstore.dk, Filament23D.dk, in2motion.dk, Techbitshop.dk, 3djake.com, www.reprap.me
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
-  const detailsFilename = `3dstore-details-${utils.getToday()}.json`;
+  const detailsFilename = `output/3dstore-details-${utils.getToday()}.json`;
 
   const listInfo = await scrapeList(page);
 

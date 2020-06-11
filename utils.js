@@ -66,7 +66,7 @@ function detectWidth(text) {
 }
 
 function detectType(text)  {
-  const regex = /(PETG|PLA|ABS|ASA|RESIN|FLEX|nylon|PC|PP\+|PBT\+|PVA|POM|resin)/gim
+  const regex = /(PET-G|PETG|PLA|ABS|ASA|RESIN|FLEX|nylon|PC|PP\+|PBT\+|PVA|POM|resin|PETT)/gim
 
   const matches = text.match(regex);
   if (!matches) {
